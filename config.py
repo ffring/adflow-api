@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     # OpenRouter API
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    llm_model_main: str = "anthropic/claude-sonnet-4-20250514"
-    llm_model_fast: str = "anthropic/claude-haiku-4-20250514"
+    llm_model_main: str = "anthropic/claude-sonnet-4"
+    llm_model_fast: str = "anthropic/claude-haiku-4.5"
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./adflow.db"
