@@ -1,22 +1,31 @@
 import json
 from typing import Any, Optional, Type, TypeVar
 from pydantic import BaseModel
-import anthropic
+import httpx
 from config import get_settings
 
 T = TypeVar("T", bound=BaseModel)
 
 
 class LLMService:
-    """Wrapper around Claude API for agent interactions."""
+    """Wrapper around OpenRouter API for agent interactions."""
 
     def __init__(self):
         self.settings = get_settings()
-        self.client: Optional[anthropic.AsyncAnthropic] = None
+        self.client: Optional[httpx.AsyncClient] = None
 
-    def _get_client(self) -> anthropic.AsyncAnthropic:
+    def _get_client(self) -> httpx.AsyncClient:
         if self.client is None:
-            self.client = anthropic.AsyncAnthropic(api_key=self.settings.anthropic_api_key)
+            self.client = httpx.AsyncClient(
+                base_url=self.settings.openrouter_base_url,
+                headers={
+                    "Authorization": f"Bearer {self.settings.openrouter_api_key}",
+                    "HTTP-Referer": "https://adflow-web-b4t.pages.dev",
+                    "X-Title": "AdFlow AI",
+                    "Content-Type": "application/json",
+                },
+                timeout=120.0,
+            )
         return self.client
 
     async def complete(
@@ -29,17 +38,24 @@ class LLMService:
     ) -> str:
         """Simple completion without structured output."""
         client = self._get_client()
-        model = model or self.settings.claude_model_main
+        model = model or self.settings.llm_model_main
 
-        response = await client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+        response = await client.post(
+            "/chat/completions",
+            json={
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+            },
         )
+        response.raise_for_status()
+        data = response.json()
 
-        return response.content[0].text
+        return data["choices"][0]["message"]["content"]
 
     async def complete_structured(
         self,
@@ -51,8 +67,7 @@ class LLMService:
         temperature: float = 0.5,
     ) -> T:
         """Completion with structured JSON output parsed into Pydantic model."""
-        client = self._get_client()
-        model = model or self.settings.claude_model_main
+        model = model or self.settings.llm_model_main
 
         # Add JSON schema instruction to system prompt
         schema_json = json.dumps(output_schema.model_json_schema(), indent=2, ensure_ascii=False)
@@ -65,15 +80,13 @@ class LLMService:
 
 Отвечай ТОЛЬКО валидным JSON без дополнительного текста."""
 
-        response = await client.messages.create(
+        response_text = await self.complete(
+            system_prompt=full_system,
+            user_message=user_message,
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
-            system=full_system,
-            messages=[{"role": "user", "content": user_message}],
         )
-
-        response_text = response.content[0].text
 
         # Try to extract JSON from response
         json_text = self._extract_json(response_text)
@@ -91,17 +104,23 @@ class LLMService:
     ) -> str:
         """Multi-turn chat completion."""
         client = self._get_client()
-        model = model or self.settings.claude_model_main
+        model = model or self.settings.llm_model_main
 
-        response = await client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=messages,
+        all_messages = [{"role": "system", "content": system_prompt}] + messages
+
+        response = await client.post(
+            "/chat/completions",
+            json={
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": all_messages,
+            },
         )
+        response.raise_for_status()
+        data = response.json()
 
-        return response.content[0].text
+        return data["choices"][0]["message"]["content"]
 
     def _extract_json(self, text: str) -> str:
         """Extract JSON from response that might have markdown code blocks."""

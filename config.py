@@ -7,10 +7,11 @@ class Settings(BaseSettings):
     app_name: str = "AdFlow AI"
     debug: bool = False
 
-    # Claude API
-    anthropic_api_key: str = ""
-    claude_model_main: str = "claude-sonnet-4-20250514"
-    claude_model_fast: str = "claude-haiku-4-20250514"
+    # OpenRouter API
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    llm_model_main: str = "anthropic/claude-sonnet-4-20250514"
+    llm_model_fast: str = "anthropic/claude-haiku-4-20250514"
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./adflow.db"
