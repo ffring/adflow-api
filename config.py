@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite+aiosqlite:///./adflow.db"
 
-    # nano-banana (placeholder)
+    # kie.ai (nano-banana) - image generation
     nano_banana_api_key: str = ""
-    nano_banana_api_url: str = "https://api.nano-banana.com/v1"
+    nano_banana_api_url: str = "https://api.kie.ai/v1"
 
     # Limits
     max_creatives_per_project: int = 100

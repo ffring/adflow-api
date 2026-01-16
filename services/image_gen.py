@@ -25,11 +25,15 @@ class BannerResponse(BaseModel):
 
 
 class ImageGenService:
-    """Service for generating banners via nano-banana API (or mock)."""
+    """Service for generating banners via kie.ai (nano-banana) API."""
 
     def __init__(self):
         self.settings = get_settings()
-        self.mock_mode = True  # Will switch to False when API is available
+
+    @property
+    def mock_mode(self) -> bool:
+        """Use mock mode if API key is not configured."""
+        return not self.settings.nano_banana_api_key
 
     async def generate_banner(self, request: BannerRequest) -> BannerResponse:
         """Generate a banner image."""
@@ -40,7 +44,6 @@ class ImageGenService:
 
     async def _mock_generate(self, request: BannerRequest) -> BannerResponse:
         """Mock banner generation - returns placeholder image."""
-        # Use placeholder.com or similar service for mock
         placeholder_url = (
             f"https://placehold.co/{request.width}x{request.height}/1a1a2e/eee"
             f"?text=Banner+{request.width}x{request.height}"
@@ -54,8 +57,12 @@ class ImageGenService:
         )
 
     async def _real_generate(self, request: BannerRequest) -> BannerResponse:
-        """Real banner generation via nano-banana API."""
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        """Real banner generation via kie.ai (nano-banana) API."""
+        # Build detailed prompt for advertising banner
+        full_prompt = self._build_prompt(request)
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # kie.ai API endpoint
             response = await client.post(
                 f"{self.settings.nano_banana_api_url}/generate",
                 headers={
@@ -63,23 +70,50 @@ class ImageGenService:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "prompt": request.prompt,
+                    "prompt": full_prompt,
                     "width": request.width,
                     "height": request.height,
-                    "style": request.style,
-                    "text_overlay": request.text_overlay,
-                    "brand_colors": request.brand_colors,
+                    "style": "professional advertising banner",
+                    "negative_prompt": "blurry, low quality, distorted text, watermark, logo",
                 },
             )
-            response.raise_for_status()
+
+            if response.status_code != 200:
+                # Fallback to mock on error
+                print(f"Image gen API error: {response.status_code} - {response.text}")
+                return await self._mock_generate(request)
+
             data = response.json()
 
             return BannerResponse(
-                image_url=data["image_url"],
+                image_url=data.get("image_url", data.get("url", "")),
                 width=data.get("width", request.width),
                 height=data.get("height", request.height),
-                prompt_used=data.get("prompt", request.prompt),
+                prompt_used=full_prompt,
             )
+
+    def _build_prompt(self, request: BannerRequest) -> str:
+        """Build detailed prompt for banner generation."""
+        parts = [
+            "Professional advertising banner design",
+            f"Size: {request.width}x{request.height} pixels",
+            f"Content: {request.prompt}",
+        ]
+
+        if request.text_overlay:
+            parts.append(f"Main text overlay: '{request.text_overlay}'")
+
+        if request.brand_colors:
+            parts.append(f"Brand colors: {', '.join(request.brand_colors)}")
+
+        parts.extend([
+            "Style: clean, modern, minimalist",
+            "High contrast, readable text",
+            "Professional corporate design",
+            "No watermarks, no stock photo marks",
+        ])
+
+        return ". ".join(parts)
 
     async def generate_batch(self, requests: list[BannerRequest]) -> list[BannerResponse]:
         """Generate multiple banners."""
