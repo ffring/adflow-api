@@ -27,6 +27,33 @@ class ChatMessage(BaseModel):
     stage: Optional[str] = None
 
 
+class AnswersSubmit(BaseModel):
+    """Answers to client interview questions."""
+
+    answers: dict
+
+
+class RegenerateRequest(BaseModel):
+    """Request to regenerate a creative."""
+
+    creative_id: str
+    feedback: Optional[str] = None
+
+
+class VariationRequest(BaseModel):
+    """Request to create a variation of a creative."""
+
+    creative_id: str
+    variation_type: str = "tone"  # tone, angle, length, cta
+
+
+class GenerateMoreRequest(BaseModel):
+    """Request to generate more creatives for a platform."""
+
+    platform: str
+    count: int = 3
+
+
 @router.post("", response_model=ProjectResponse)
 async def create_project(data: ProjectCreate, background_tasks: BackgroundTasks):
     """Create a new project and start analysis."""
@@ -135,12 +162,130 @@ async def send_chat_message(project_id: str, data: ChatMessage):
     }
 
 
-@router.post("/{project_id}/answer")
-async def submit_answers(project_id: str, answers: dict):
-    """Submit answers to PM questions."""
+@router.post("/{project_id}/answers")
+async def submit_answers(project_id: str, data: AnswersSubmit, background_tasks: BackgroundTasks):
+    """Submit answers to interview questions and continue pipeline."""
     project = projects_db.get(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # TODO: Process answers and continue pipeline
-    return {"message": "Answers received", "project_id": project_id}
+    if project.status != ProjectStatus.QUESTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Project is not waiting for answers (current status: {project.status})"
+        )
+
+    # Continue pipeline with answers in background
+    background_tasks.add_task(orchestrator.continue_after_answers, project, data.answers)
+
+    return {
+        "message": "Answers received, continuing pipeline",
+        "project_id": project_id,
+        "answers_count": len(data.answers),
+    }
+
+
+@router.post("/{project_id}/creatives/regenerate")
+async def regenerate_creative(project_id: str, data: RegenerateRequest):
+    """Regenerate a specific creative with optional feedback."""
+    project = projects_db.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.status != ProjectStatus.COMPLETED:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot regenerate creatives until pipeline is complete"
+        )
+
+    try:
+        result = await orchestrator.regenerate_creative(
+            project, data.creative_id, data.feedback or ""
+        )
+        return {
+            "message": "Creative regenerated",
+            "creative_id": data.creative_id,
+            "creatives": result.model_dump(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{project_id}/creatives/variation")
+async def create_creative_variation(project_id: str, data: VariationRequest):
+    """Create a variation of a specific creative."""
+    project = projects_db.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.status != ProjectStatus.COMPLETED:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot create variations until pipeline is complete"
+        )
+
+    if data.variation_type not in ["tone", "angle", "length", "cta"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid variation type. Must be one of: tone, angle, length, cta"
+        )
+
+    try:
+        result = await orchestrator.create_variation(
+            project, data.creative_id, data.variation_type
+        )
+        return {
+            "message": f"Variation ({data.variation_type}) created",
+            "creative_id": data.creative_id,
+            "creatives": result.model_dump(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{project_id}/creatives/generate-more")
+async def generate_more_creatives(project_id: str, data: GenerateMoreRequest):
+    """Generate more creatives for a specific platform."""
+    project = projects_db.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.status != ProjectStatus.COMPLETED:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot generate more creatives until pipeline is complete"
+        )
+
+    valid_platforms = [
+        "yandex_direct", "vk_ads", "telegram_ads", "telegram_seeding",
+        "yandex_business", "vk_market"
+    ]
+    if data.platform not in valid_platforms:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid platform. Must be one of: {', '.join(valid_platforms)}"
+        )
+
+    if not 1 <= data.count <= 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Count must be between 1 and 10"
+        )
+
+    try:
+        result = await orchestrator.generate_more(project, data.platform, data.count)
+        return {
+            "message": f"Generated {data.count} more creatives for {data.platform}",
+            "platform": data.platform,
+            "count": data.count,
+            "creatives": result.model_dump(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Legacy endpoint for backward compatibility
+@router.post("/{project_id}/answer")
+async def submit_answers_legacy(project_id: str, answers: dict, background_tasks: BackgroundTasks):
+    """Submit answers to PM questions (legacy endpoint)."""
+    return await submit_answers(project_id, AnswersSubmit(answers=answers), background_tasks)

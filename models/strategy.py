@@ -4,9 +4,49 @@ from pydantic import BaseModel, Field
 
 
 class AdPlatform(str, Enum):
-    YANDEX_DIRECT = "yandex_direct"
-    VK_ADS = "vk_ads"
-    TELEGRAM_ADS = "telegram_ads"
+    """Рекламные платформы и каналы."""
+
+    # Яндекс
+    YANDEX_DIRECT = "yandex_direct"  # Яндекс.Директ (РСЯ, поиск)
+    YANDEX_BUSINESS = "yandex_business"  # Яндекс.Бизнес (карточки)
+
+    # VK экосистема
+    VK_ADS = "vk_ads"  # VK Реклама (таргет)
+    VK_MARKET = "vk_market"  # VK Маркет
+
+    # Telegram
+    TELEGRAM_ADS = "telegram_ads"  # Telegram Ads (официальная реклама)
+    TELEGRAM_SEEDING = "telegram_seeding"  # Посевы в TG каналах
+
+    # Другие
+    GOOGLE_ADS = "google_ads"  # Google Ads (для международных)
+    META_ADS = "meta_ads"  # Meta (Instagram/Facebook)
+
+
+class AdFormat(str, Enum):
+    """Форматы рекламных креативов."""
+
+    # Яндекс Директ
+    YD_TEXT = "yd_text"  # Текстовое объявление на поиске
+    YD_TEXT_IMAGE = "yd_text_image"  # Текстово-графическое (РСЯ)
+    YD_SMART_BANNER = "yd_smart_banner"  # Смарт-баннер
+    YD_VIDEO = "yd_video"  # Видео
+
+    # VK
+    VK_UNIVERSAL = "vk_universal"  # Универсальное объявление
+    VK_CAROUSEL = "vk_carousel"  # Карусель
+    VK_STORIES = "vk_stories"  # Истории
+    VK_CLIPS = "vk_clips"  # Клипы
+
+    # Telegram
+    TG_ADS_TEXT = "tg_ads_text"  # Telegram Ads текст
+    TG_SEEDING_POST = "tg_seeding_post"  # Пост для посева
+    TG_SEEDING_FORWARD = "tg_seeding_forward"  # Репост с канала
+
+    # Общие
+    BANNER_HORIZONTAL = "banner_horizontal"  # 16:9
+    BANNER_SQUARE = "banner_square"  # 1:1
+    BANNER_VERTICAL = "banner_vertical"  # 9:16
 
 
 class TargetAudience(BaseModel):
@@ -38,6 +78,10 @@ class PlatformStrategy(BaseModel):
     targeting_approach: str = ""
     creatives_count: int = Field(default=5, ge=1, le=50)
     notes: str = ""
+    recommended: bool = Field(default=False, description="Рекомендуется стратегом")
+    priority: int = Field(default=1, ge=1, le=5, description="Приоритет канала (1=высший)")
+    min_budget_rub: int = Field(default=0, description="Минимальный бюджет для канала")
+    expected_cpa_range: str = Field(default="", description="Ожидаемая стоимость конверсии")
 
 
 class Strategy(BaseModel):

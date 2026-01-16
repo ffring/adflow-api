@@ -27,11 +27,26 @@ class VKCreative(BaseModel):
 
 
 class TelegramCreative(BaseModel):
-    """Creative for Telegram Ads."""
+    """Creative for Telegram Ads (official)."""
 
     text: str = Field(..., max_length=160, description="Ad text (max 160 chars)")
     button_text: str = Field(..., max_length=25, description="CTA button text")
     button_url: Optional[str] = None
+
+
+class TelegramSeedingCreative(BaseModel):
+    """Creative for Telegram Seeding (native posts in channels)."""
+
+    text: str = Field(..., max_length=1000, description="Native post text (300-500 recommended)")
+    short_text: Optional[str] = Field(None, max_length=300, description="Short version for smaller channels")
+    image_prompt: Optional[str] = Field(None, description="Image description if needed")
+    has_image: bool = Field(default=False, description="Whether post should have an image")
+    button_text: Optional[str] = Field(None, max_length=25, description="Optional inline button")
+    button_url: Optional[str] = None
+    post_style: str = Field(default="native", description="native/informative/entertaining")
+    suggested_channels_type: list[str] = Field(
+        default_factory=list, description="Types of channels for this post (tech/business/lifestyle)"
+    )
 
 
 class Creative(BaseModel):
@@ -44,6 +59,7 @@ class Creative(BaseModel):
     yandex: Optional[YandexCreative] = None
     vk: Optional[VKCreative] = None
     telegram: Optional[TelegramCreative] = None
+    telegram_seeding: Optional[TelegramSeedingCreative] = None
 
 
 class CreativeSet(BaseModel):
